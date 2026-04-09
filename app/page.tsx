@@ -45,40 +45,29 @@ function parseIPA(ipa: string): string[] {
   let i = 0;
   while (i < clean.length) {
     if (clean[i] === ' ') { i++; continue; }
-    // 2文字の二重母音・破擦音を優先
     const two = clean.slice(i, i + 2);
     if (['aɪ','aʊ','oʊ','ɔɪ','eɪ','tʃ','dʒ'].includes(two)) {
       tokens.push(two); i += 2; continue;
     }
-    // 非破裂記号付き
     const withStop = clean.slice(i, i + 2);
     if (withStop.length === 2 && withStop[1] === '̚') {
       tokens.push(withStop); i += 2; continue;
     }
     tokens.push(clean[i]); i++;
   }
-  return tokens.filter(t => IPA_ASSETS[t] !== undefined || t.length > 0);
+  return tokens.filter(t => t.length > 0);
 }
 
 function IPAVisualizer({ ipa }: { ipa: string }) {
   const tokens = parseIPA(ipa);
   if (tokens.length === 0) return null;
-
   return (
     <div className="flex flex-wrap gap-1 mt-2">
       {tokens.map((token, i) => {
         const imgUrl = IPA_ASSETS[token];
         const isStressed = STRESSED_VOWELS.includes(token);
         return (
-          <div
-            key={i}
-            className={`flex flex-col items-center rounded-lg p-1 border ${
-              isStressed
-                ? 'bg-purple-50 border-purple-200'
-                : 'bg-gray-50 border-gray-200'
-            }`}
-            style={{ minWidth: 44 }}
-          >
+          <div key={i} className={`flex flex-col items-center rounded-lg p-1 border ${isStressed ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`} style={{ minWidth: 44 }}>
             <span className="text-xs font-mono text-gray-700">{token}</span>
             {imgUrl ? (
               <img src={imgUrl} alt={token} className="w-9 h-9 object-contain mt-0.5" />
@@ -87,6 +76,24 @@ function IPAVisualizer({ ipa }: { ipa: string }) {
                 <span className="text-gray-300 text-xs">?</span>
               </div>
             )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MeaningsRow({ meanings }: { meanings: string }) {
+  if (!meanings) return null;
+  const pairs = meanings.split('/').map(s => s.trim()).filter(Boolean);
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {pairs.map((pair, i) => {
+        const [word, meaning] = pair.split('=').map(s => s.trim());
+        return (
+          <div key={i} className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-2 py-1" style={{ minWidth: 48 }}>
+            <span className="text-xs text-amber-800 font-medium">{meaning}</span>
+            <span className="text-xs text-amber-600">{word}</span>
           </div>
         );
       })}
@@ -104,6 +111,7 @@ export default function Home() {
   const [pointA, setPointA] = useState<number | null>(null);
   const [pointB, setPointB] = useState<number | null>(null);
   const [ipaMap, setIpaMap] = useState<Record<number, string>>({});
+  const [meaningsMap, setMeaningsMap] = useState<Record<number, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const loopRef = useRef<any>(null);
   const remainRef = useRef(0);
@@ -127,10 +135,7 @@ export default function Home() {
   const analyzeAll = async (lines: Line[]) => {
     setAnalyzing(true);
     try {
-      const payload = lines.map(l => ({
-        offset: l.offset,
-        text: cleanText(l.text),
-      }));
+      const payload = lines.map(l => ({ offset: l.offset, text: cleanText(l.text) }));
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,6 +143,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.ipaMap) setIpaMap(data.ipaMap);
+      if (data.meaningsMap) setMeaningsMap(data.meaningsMap);
     } catch (e) {
       console.error(e);
     } finally {
@@ -155,10 +161,7 @@ export default function Home() {
 
   const seekTo = (offsetMs: number, index: number) => {
     setActiveIndex(index);
-    if (player) {
-      player.seekTo(offsetMs / 1000, true);
-      player.playVideo();
-    }
+    if (player) { player.seekTo(offsetMs / 1000, true); player.playVideo(); }
   };
 
   const getCurrentTime = () => player?.getCurrentTime() ?? 0;
@@ -186,12 +189,8 @@ export default function Home() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' && pointARef.current !== null) {
-        e.preventDefault(); updateA(pointARef.current - 0.1);
-      }
-      if (e.key === 'ArrowRight' && pointARef.current !== null) {
-        e.preventDefault(); updateA(pointARef.current + 0.1);
-      }
+      if (e.key === 'ArrowLeft' && pointARef.current !== null) { e.preventDefault(); updateA(pointARef.current - 0.1); }
+      if (e.key === 'ArrowRight' && pointARef.current !== null) { e.preventDefault(); updateA(pointARef.current + 0.1); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -216,41 +215,24 @@ export default function Home() {
     player.setPlaybackRate(speed);
     player.playVideo();
     loopRef.current = setInterval(() => {
-      const a = pointARef.current;
-      const b = pointBRef.current;
+      const a = pointARef.current; const b = pointBRef.current;
       if (a === null || b === null) return;
       if (player.getCurrentTime() >= b) {
-        if (remainRef.current <= 1) {
-          clearInterval(loopRef.current);
-          player.pauseVideo();
-        } else {
-          remainRef.current -= 1;
-          player.seekTo(a, true);
-        }
+        if (remainRef.current <= 1) { clearInterval(loopRef.current); player.pauseVideo(); }
+        else { remainRef.current -= 1; player.seekTo(a, true); }
       }
     }, 100);
   };
 
-  const fmt = (n: number) => {
-    const m = Math.floor(n / 60);
-    const s = (n % 60).toFixed(1);
-    return `${m}:${s.padStart(4, '0')}`;
-  };
-
+  const fmt = (n: number) => `${Math.floor(n / 60)}:${(n % 60).toFixed(1).padStart(4, '0')}`;
   const fmtMs = (ms: number) => {
-    const total = Math.floor(ms / 1000);
-    const m = Math.floor(total / 60);
-    const s = total % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
+    const t = Math.floor(ms / 1000);
+    return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   };
-
-  const cleanText = (text: string) =>
-    text.replace(/♪\s*/g, '').replace(/\s*♪/g, '').replace(/\n/g, ' ').trim();
+  const cleanText = (text: string) => text.replace(/♪\s*/g, '').replace(/\s*♪/g, '').replace(/\n/g, ' ').trim();
 
   const NudgeBtn = ({ onClick, label, disabled }: { onClick: () => void; label: string; disabled?: boolean }) => (
-    <button onClick={onClick} disabled={disabled} className="px-2 h-9 text-gray-400 hover:bg-gray-100 disabled:opacity-20 text-xs">
-      {label}
-    </button>
+    <button onClick={onClick} disabled={disabled} className="px-2 h-9 text-gray-400 hover:bg-gray-100 disabled:opacity-20 text-xs">{label}</button>
   );
 
   return (
@@ -263,7 +245,6 @@ export default function Home() {
           <YouTube videoId={VIDEO_ID} onReady={onReady} opts={{ width: '100%', height: '360' }} />
         </div>
 
-        {/* コントロールパネル */}
         <div className="bg-white border border-gray-100 rounded-b-xl px-4 py-4 mb-6">
           <div className="flex gap-2 mb-4">
             <div className="flex flex-1 items-center rounded-full border border-gray-200 overflow-hidden">
@@ -286,7 +267,6 @@ export default function Home() {
             </div>
             <button onClick={clearAB} className="px-4 h-9 rounded-full text-sm border border-gray-200 text-gray-400 hover:bg-gray-50">クリア</button>
           </div>
-
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 bg-gray-50 rounded-full px-3 h-9">
               <span className="text-xs text-gray-400">速度</span>
@@ -301,40 +281,30 @@ export default function Home() {
               <span className="text-xs text-gray-400">回</span>
               <button onClick={() => changeRepeat(1)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">+</button>
             </div>
-            <button
-              onClick={startLoop}
-              disabled={pointA === null || pointB === null}
-              className={`flex-1 h-9 rounded-full text-sm font-medium transition-colors ${pointA !== null && pointB !== null ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
-            >
+            <button onClick={startLoop} disabled={pointA === null || pointB === null}
+              className={`flex-1 h-9 rounded-full text-sm font-medium transition-colors ${pointA !== null && pointB !== null ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}>
               ループ再生
             </button>
           </div>
         </div>
 
-        {/* 字幕リスト */}
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-gray-400">Shape of You — Ed Sheeran</p>
-            {analyzing && <p className="text-xs text-purple-400">IPA解析中...</p>}
+            {analyzing && <p className="text-xs text-purple-400">解析中...</p>}
           </div>
           {lyrics.length === 0 && <p className="text-sm text-gray-400">読み込み中...</p>}
           <div className="space-y-2">
             {lyrics.map((line, i) => (
-              <div
-                key={i}
-                onClick={() => seekTo(line.offset, i)}
-                className={`p-3 rounded-lg cursor-pointer transition-colors ${activeIndex === i ? 'bg-purple-50 border border-purple-100' : 'hover:bg-gray-50'}`}
-              >
+              <div key={i} onClick={() => seekTo(line.offset, i)}
+                className={`p-3 rounded-lg cursor-pointer transition-colors ${activeIndex === i ? 'bg-purple-50 border border-purple-100' : 'hover:bg-gray-50'}`}>
                 <div className="flex items-start gap-3">
                   <span className="text-xs text-gray-400 mt-1 flex-shrink-0">{fmtMs(line.offset)}</span>
                   <div className="flex-1">
-                    <p className="text-gray-900 text-sm">{cleanText(line.text)}</p>
-                    {ipaMap[line.offset] && (
-                      <>
-                        <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>
-                        <IPAVisualizer ipa={ipaMap[line.offset]} />
-                      </>
-                    )}
+                    {meaningsMap[line.offset] && <MeaningsRow meanings={meaningsMap[line.offset]} />}
+                    <p className="text-gray-900 text-sm mt-1">{cleanText(line.text)}</p>
+                    {ipaMap[line.offset] && <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>}
+                    {ipaMap[line.offset] && <IPAVisualizer ipa={ipaMap[line.offset]} />}
                   </div>
                 </div>
               </div>
