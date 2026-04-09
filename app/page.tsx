@@ -16,14 +16,17 @@ export default function Home() {
   const [repeatInput, setRepeatInput] = useState('10');
   const [pointA, setPointA] = useState<number | null>(null);
   const [pointB, setPointB] = useState<number | null>(null);
+  const [ipaMap, setIpaMap] = useState<Record<number, string>>({});
+  const [loadingIpa, setLoadingIpa] = useState<number | null>(null);
   const loopRef = useRef<any>(null);
   const remainRef = useRef(0);
   const pointARef = useRef<number | null>(null);
   const pointBRef = useRef<number | null>(null);
   const speed = SPEED_STEPS[speedIndex];
+  const VIDEO_ID = 'JGwWNGJdvx8';
 
   useEffect(() => {
-    fetch('/api/captions?videoId=JGwWNGJdvx8')
+    fetch(`/api/captions?videoId=${VIDEO_ID}`)
       .then(r => r.json())
       .then(data => {
         const filtered = data.transcript.filter((l: Line) =>
@@ -32,6 +35,30 @@ export default function Home() {
         setLyrics(filtered);
       });
   }, []);
+
+  const fetchIpa = async (line: Line, index: number) => {
+    if (ipaMap[index] !== undefined) return;
+    setLoadingIpa(index);
+    try {
+      const res = await fetch('/api/ipa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: VIDEO_ID,
+          offsetMs: line.offset,
+          text: cleanText(line.text),
+        }),
+      });
+      const data = await res.json();
+      if (data.ipa) {
+        setIpaMap(prev => ({ ...prev, [index]: data.ipa }));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingIpa(null);
+    }
+  };
 
   const onReady = (e: any) => setPlayer(e.target);
 
@@ -43,6 +70,7 @@ export default function Home() {
 
   const seekTo = (offsetMs: number, index: number) => {
     setActiveIndex(index);
+    fetchIpa(lyrics[index], index);
     if (player) {
       player.seekTo(offsetMs / 1000, true);
       player.playVideo();
@@ -148,7 +176,7 @@ export default function Home() {
         <p className="text-sm text-gray-500 mb-6">洋楽で発音を学ぶ</p>
 
         <div className="rounded-xl overflow-hidden mb-0">
-          <YouTube videoId="JGwWNGJdvx8" onReady={onReady} opts={{ width: '100%', height: '360' }} />
+          <YouTube videoId={VIDEO_ID} onReady={onReady} opts={{ width: '100%', height: '360' }} />
         </div>
 
         {/* コントロールパネル */}
@@ -210,8 +238,17 @@ export default function Home() {
                 onClick={() => seekTo(line.offset, i)}
                 className={`p-3 rounded-lg cursor-pointer transition-colors ${activeIndex === i ? 'bg-purple-50 border border-purple-100' : 'hover:bg-gray-50'}`}
               >
-                <span className="text-xs text-gray-400 mr-3">{fmtMs(line.offset)}</span>
-                <span className="text-gray-900">{cleanText(line.text)}</span>
+                <div className="flex items-start gap-3">
+                  <span className="text-xs text-gray-400 mt-1 flex-shrink-0">{fmtMs(line.offset)}</span>
+                  <div className="flex-1">
+                    <p className="text-gray-900 text-sm">{cleanText(line.text)}</p>
+                    {activeIndex === i && (
+                      <p className="text-xs text-purple-500 font-mono mt-1">
+                        {loadingIpa === i ? '解析中...' : (ipaMap[i] ?? '')}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
