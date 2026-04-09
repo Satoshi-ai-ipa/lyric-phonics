@@ -4,8 +4,95 @@ import YouTube from 'react-youtube';
 import { useState, useRef, useEffect } from 'react';
 
 const SPEED_STEPS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
 type Line = { text: string; offset: number; duration: number };
+
+const BASE_URL = 'https://storage.googleapis.com/ipa-visualizer-assets-ipa-visualizer-secure/assets/';
+
+const IPA_ASSETS: Record<string, string> = {
+  'ɑ': BASE_URL + 'aa.png', 'æ': BASE_URL + 'ae.png',
+  'ʌ': BASE_URL + 'uh.png', 'ə': BASE_URL + 'schwa.png',
+  'ɝ': BASE_URL + 'er_stressed.png', 'ɚ': BASE_URL + 'er_unstressed.png',
+  'ɔ': BASE_URL + 'aw.png', 'ɛ': BASE_URL + 'eh.png',
+  'ɪ': BASE_URL + 'ih.png', 'i': BASE_URL + 'iy.png',
+  'ʊ': BASE_URL + 'uh_book.png', 'u': BASE_URL + 'uw.png',
+  'aɪ': BASE_URL + 'ay.png', 'aʊ': BASE_URL + 'aw_out.png',
+  'oʊ': BASE_URL + 'ow.png', 'ɔɪ': BASE_URL + 'oy.png',
+  'eɪ': BASE_URL + 'ey.png',
+  'p': BASE_URL + 'p.png', 'p̚': BASE_URL + 'p_stop.png',
+  'b': BASE_URL + 'b.png', 'b̚': BASE_URL + 'b_stop.png',
+  'k': BASE_URL + 'k.png', 'k̚': BASE_URL + 'k_stop.png',
+  'ɡ': BASE_URL + 'g.png', 'ɡ̚': BASE_URL + 'g_stop.png',
+  't': BASE_URL + 't.png', 't̚': BASE_URL + 't_stop.png',
+  'd': BASE_URL + 'd.png', 'd̚': BASE_URL + 'd_stop.png',
+  'ɾ': BASE_URL + 'flap_t.png', 'ʔ': BASE_URL + 'glottal.png',
+  'f': BASE_URL + 'f.png', 'v': BASE_URL + 'v.png',
+  'θ': BASE_URL + 'th_unvoiced.png', 'ð': BASE_URL + 'th_voiced.png',
+  's': BASE_URL + 's.png', 'z': BASE_URL + 'z.png',
+  'ʃ': BASE_URL + 'sh.png', 'ʒ': BASE_URL + 'zh.png',
+  'tʃ': BASE_URL + 'ch.png', 'dʒ': BASE_URL + 'jh.png',
+  'h': BASE_URL + 'h.png', 'm': BASE_URL + 'm.png',
+  'n': BASE_URL + 'n.png', 'ŋ': BASE_URL + 'ng.png',
+  'w': BASE_URL + 'w.png', 'j': BASE_URL + 'y.png',
+  'r': BASE_URL + 'r.png', 'l': BASE_URL + 'l.png',
+  'ɫ': BASE_URL + 'l_dark.png',
+};
+
+const STRESSED_VOWELS = ['ɑ','æ','ʌ','ɝ','ɔ','ɛ','ɪ','i','ʊ','u','aɪ','aʊ','oʊ','ɔɪ','eɪ'];
+
+function parseIPA(ipa: string): string[] {
+  const tokens: string[] = [];
+  const clean = ipa.replace(/[ˈˌ.‿͡]/g, ' ').replace(/\s+/g, ' ').trim();
+  let i = 0;
+  while (i < clean.length) {
+    if (clean[i] === ' ') { i++; continue; }
+    // 2文字の二重母音・破擦音を優先
+    const two = clean.slice(i, i + 2);
+    if (['aɪ','aʊ','oʊ','ɔɪ','eɪ','tʃ','dʒ'].includes(two)) {
+      tokens.push(two); i += 2; continue;
+    }
+    // 非破裂記号付き
+    const withStop = clean.slice(i, i + 2);
+    if (withStop.length === 2 && withStop[1] === '̚') {
+      tokens.push(withStop); i += 2; continue;
+    }
+    tokens.push(clean[i]); i++;
+  }
+  return tokens.filter(t => IPA_ASSETS[t] !== undefined || t.length > 0);
+}
+
+function IPAVisualizer({ ipa }: { ipa: string }) {
+  const tokens = parseIPA(ipa);
+  if (tokens.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {tokens.map((token, i) => {
+        const imgUrl = IPA_ASSETS[token];
+        const isStressed = STRESSED_VOWELS.includes(token);
+        return (
+          <div
+            key={i}
+            className={`flex flex-col items-center rounded-lg p-1 border ${
+              isStressed
+                ? 'bg-purple-50 border-purple-200'
+                : 'bg-gray-50 border-gray-200'
+            }`}
+            style={{ minWidth: 44 }}
+          >
+            <span className="text-xs font-mono text-gray-700">{token}</span>
+            {imgUrl ? (
+              <img src={imgUrl} alt={token} className="w-9 h-9 object-contain mt-0.5" />
+            ) : (
+              <div className="w-9 h-9 mt-0.5 bg-gray-100 rounded flex items-center justify-center">
+                <span className="text-gray-300 text-xs">?</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Home() {
   const [lyrics, setLyrics] = useState<Line[]>([]);
@@ -17,7 +104,7 @@ export default function Home() {
   const [pointA, setPointA] = useState<number | null>(null);
   const [pointB, setPointB] = useState<number | null>(null);
   const [ipaMap, setIpaMap] = useState<Record<number, string>>({});
-  const [loadingIpa, setLoadingIpa] = useState<number | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const loopRef = useRef<any>(null);
   const remainRef = useRef(0);
   const pointARef = useRef<number | null>(null);
@@ -33,30 +120,28 @@ export default function Home() {
           !l.text.startsWith('[') && !l.text.startsWith('♪ (')
         );
         setLyrics(filtered);
+        analyzeAll(filtered);
       });
   }, []);
 
-  const fetchIpa = async (line: Line, index: number) => {
-    if (ipaMap[index] !== undefined) return;
-    setLoadingIpa(index);
+  const analyzeAll = async (lines: Line[]) => {
+    setAnalyzing(true);
     try {
-      const res = await fetch('/api/ipa', {
+      const payload = lines.map(l => ({
+        offset: l.offset,
+        text: cleanText(l.text),
+      }));
+      const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoId: VIDEO_ID,
-          offsetMs: line.offset,
-          text: cleanText(line.text),
-        }),
+        body: JSON.stringify({ videoId: VIDEO_ID, lyrics: payload }),
       });
       const data = await res.json();
-      if (data.ipa) {
-        setIpaMap(prev => ({ ...prev, [index]: data.ipa }));
-      }
+      if (data.ipaMap) setIpaMap(data.ipaMap);
     } catch (e) {
       console.error(e);
     } finally {
-      setLoadingIpa(null);
+      setAnalyzing(false);
     }
   };
 
@@ -70,7 +155,6 @@ export default function Home() {
 
   const seekTo = (offsetMs: number, index: number) => {
     setActiveIndex(index);
-    fetchIpa(lyrics[index], index);
     if (player) {
       player.seekTo(offsetMs / 1000, true);
       player.playVideo();
@@ -229,9 +313,12 @@ export default function Home() {
 
         {/* 字幕リスト */}
         <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <p className="text-xs text-gray-400 mb-3">Shape of You — Ed Sheeran</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-gray-400">Shape of You — Ed Sheeran</p>
+            {analyzing && <p className="text-xs text-purple-400">IPA解析中...</p>}
+          </div>
           {lyrics.length === 0 && <p className="text-sm text-gray-400">読み込み中...</p>}
-          <div className="space-y-1">
+          <div className="space-y-2">
             {lyrics.map((line, i) => (
               <div
                 key={i}
@@ -242,10 +329,11 @@ export default function Home() {
                   <span className="text-xs text-gray-400 mt-1 flex-shrink-0">{fmtMs(line.offset)}</span>
                   <div className="flex-1">
                     <p className="text-gray-900 text-sm">{cleanText(line.text)}</p>
-                    {activeIndex === i && (
-                      <p className="text-xs text-purple-500 font-mono mt-1">
-                        {loadingIpa === i ? '解析中...' : (ipaMap[i] ?? '')}
-                      </p>
+                    {ipaMap[line.offset] && (
+                      <>
+                        <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>
+                        <IPAVisualizer ipa={ipaMap[line.offset]} />
+                      </>
                     )}
                   </div>
                 </div>
