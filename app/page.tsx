@@ -415,7 +415,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 overflow-y-auto" style={{ height: 'calc(100vh - 520px)', minHeight: '300px' }}>
           {lyrics.length === 0 && <p className="text-sm text-gray-400">読み込み中...</p>}
           <div className="space-y-2">
             {lyrics.map((line, i) => (
