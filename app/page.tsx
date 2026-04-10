@@ -83,19 +83,19 @@ function applyUnreleasedStops(ipa: string): string {
     return word + '̚';
   });
 
- return result.join(' ');
+  return result.join(' ');
 }
 
 function parseIPA(ipa: string): { token: string; stressed: boolean }[] {
   const result: { token: string; stressed: boolean }[] = [];
   const clean = ipa
-  .replace(/'/g, 'ˈ')
-  .replace(/ər/g, 'ɚ')
-  .replace(/ɜːr/g, 'ɝ')
-  .replace(/ɡ/g, 'g')
-  .replace(/[.‿͡]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
+    .replace(/'/g, 'ˈ')
+    .replace(/ər/g, 'ɚ')
+    .replace(/ɜːr/g, 'ɝ')
+    .replace(/ɡ/g, 'g')
+    .replace(/[.‿͡]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   let i = 0;
   let pendingStress = false;
 
@@ -132,7 +132,7 @@ function parseIPA(ipa: string): { token: string; stressed: boolean }[] {
 
 function IPAVisualizer({ ipa }: { ipa: string }) {
   const correctedIpa = applyUnreleasedStops(ipa);
-console.log('補正前:', ipa, '補正後:', correctedIpa);
+  console.log('補正前:', ipa, '補正後:', correctedIpa);
   const tokens = parseIPA(correctedIpa);
   if (tokens.length === 0) return null;
   return (
@@ -190,6 +190,7 @@ export default function Home() {
   const [explanationMap, setExplanationMap] = useState<Record<number, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [devMode, setDevMode] = useState(true);
+  const [analyzeMode, setAnalyzeMode] = useState<'all' | 'ipa' | 'meanings' | 'explanation' | 'tags'>('all');
   const loopRef = useRef<any>(null);
   const remainRef = useRef(0);
   const pointARef = useRef<number | null>(null);
@@ -210,7 +211,7 @@ export default function Home() {
   }, []);
 
   const DEV_LINE_COUNT = 5;
-  const analyzeAll = async (lines: Line[], isDev?: boolean) => {
+  const analyzeAll = async (lines: Line[], isDev?: boolean, mode?: string) => {
     setAnalyzing(true);
     try {
       const targetLines = isDev ?? devMode ? lines.slice(0, DEV_LINE_COUNT) : lines;
@@ -218,7 +219,7 @@ export default function Home() {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: VIDEO_ID, lyrics: payload, devMode: isDev ?? devMode }),
+        body: JSON.stringify({ videoId: VIDEO_ID, lyrics: payload, devMode: isDev ?? devMode, mode: mode ?? analyzeMode }),
       });
       const data = await res.json();
       if (data.ipaMap) setIpaMap(data.ipaMap);
@@ -385,12 +386,29 @@ export default function Home() {
                   analyzeAll(lyrics, next);
                 }}
                 className={`text-xs px-3 py-1 rounded-full border transition-colors ${devMode
-                    ? 'bg-amber-50 border-amber-300 text-amber-700'
-                    : 'bg-green-50 border-green-300 text-green-700'
+                  ? 'bg-amber-50 border-amber-300 text-amber-700'
+                  : 'bg-green-50 border-green-300 text-green-700'
                   }`}
               >
                 {devMode ? `🛠️ 開発モード（先頭${DEV_LINE_COUNT}行）` : '🎵 本番モード（全行）'}
               </button>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {(['all', 'ipa', 'meanings', 'explanation', 'tags'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => {
+                      setAnalyzeMode(m);
+                      analyzeAll(lyrics, devMode, m);
+                    }}
+                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${analyzeMode === m
+                        ? 'bg-purple-50 border-purple-300 text-purple-700'
+                        : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                      }`}
+                  >
+                    {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA再解析' : m === 'meanings' ? '🈯 意味再解析' : m === 'explanation' ? '💬 解説再解析' : '🏷️ タグ再解析'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {lyrics.length === 0 && <p className="text-sm text-gray-400">読み込み中...</p>}
