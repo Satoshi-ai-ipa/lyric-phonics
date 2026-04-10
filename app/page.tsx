@@ -41,7 +41,6 @@ const IPA_ASSETS: Record<string, string> = {
   'ɒ': NEW_BASE_URL + 'o_short.png',
 };
 
-// ★ 母音セット — ə（シュワ）と ɚ は弱母音なので除外 → 絶対にピンクにならない
 const VOWELS = new Set([
   'a', 'e', 'i', 'o', 'u',
   'ɪ', 'ɛ', 'æ', 'ʌ', 'ɒ', 'ɔ', 'ʊ', 'ɜ', 'ɑ', 'ɝ',
@@ -51,38 +50,19 @@ const VOWELS = new Set([
 function applyUnreleasedStops(ipa: string): string {
   const stops = ['p', 'b', 't', 'd', 'k', 'g', 'ɡ'];
   const vowels = ['a', 'ɑ', 'æ', 'ʌ', 'ə', 'ɚ', 'ɝ', 'ɔ', 'ɛ', 'ɪ', 'i', 'ʊ', 'u', 'ɜ', 'ɒ'];
-
-  // スペースで単語に分割
   const words = ipa.split(' ');
-
   const result = words.map((word, wordIndex) => {
-    // tʃ, dʒ で終わる単語は対象外
     if (word.endsWith('tʃ') || word.endsWith('dʒ')) return word;
-
-    // ˈ を除いた実質的な末尾文字を取得
     const clean = word.replace(/ˈ|ˌ/g, '');
-
-    // 末尾が閉鎖音かチェック
     const lastChar = clean.slice(-1);
     if (!stops.includes(lastChar)) return word;
-
-    // 次の単語の頭の文字を取得
     const nextWord = words[wordIndex + 1];
-    if (!nextWord) {
-      // 文末 → ̚ をつける
-      return word + '̚';
-    }
-
+    if (!nextWord) return word + '̚';
     const nextClean = nextWord.replace(/ˈ|ˌ/g, '');
     const nextFirstChar = nextClean[0];
-
-    // 次の音が母音 → ̚ をつけない
     if (vowels.includes(nextFirstChar)) return word;
-
-    // 次の音が子音 → ̚ をつける
     return word + '̚';
   });
-
   return result.join(' ');
 }
 
@@ -98,7 +78,6 @@ function parseIPA(ipa: string): { token: string; stressed: boolean }[] {
     .trim();
   let i = 0;
   let pendingStress = false;
-
   while (i < clean.length) {
     if (clean[i] === ' ') { i++; continue; }
     if (clean[i] === '[' || clean[i] === ']') { i++; continue; }
@@ -106,7 +85,6 @@ function parseIPA(ipa: string): { token: string; stressed: boolean }[] {
       pendingStress = clean[i] === 'ˈ';
       i++; continue;
     }
-
     const two = clean.slice(i, i + 2);
     if (['aɪ', 'aʊ', 'oʊ', 'ɔɪ', 'eɪ', 'tʃ', 'dʒ'].includes(two)) {
       const isVowel = VOWELS.has(two);
@@ -114,13 +92,11 @@ function parseIPA(ipa: string): { token: string; stressed: boolean }[] {
       if (isVowel) pendingStress = false;
       i += 2; continue;
     }
-
     const withStop = clean.slice(i, i + 2);
     if (withStop.length === 2 && withStop[1] === '̚') {
       result.push({ token: withStop, stressed: false });
       i += 2; continue;
     }
-
     const ch = clean[i];
     const isStressableVowel = VOWELS.has(ch);
     result.push({ token: ch, stressed: isStressableVowel && pendingStress });
@@ -132,7 +108,6 @@ function parseIPA(ipa: string): { token: string; stressed: boolean }[] {
 
 function IPAVisualizer({ ipa }: { ipa: string }) {
   const correctedIpa = applyUnreleasedStops(ipa);
-  console.log('補正前:', ipa, '補正後:', correctedIpa);
   const tokens = parseIPA(correctedIpa);
   if (tokens.length === 0) return null;
   return (
@@ -140,7 +115,6 @@ function IPAVisualizer({ ipa }: { ipa: string }) {
       {tokens.map(({ token, stressed }, i) => {
         const imgUrl = IPA_ASSETS[token];
         return (
-          // ★ ② 強調色を rose に変更（選択行の purple 背景と被らない）
           <div key={i} className={`flex flex-col items-center rounded-lg p-1 border ${stressed ? 'bg-rose-100 border-rose-300' : 'bg-gray-50 border-gray-200'}`} style={{ minWidth: 44 }}>
             <span className="text-xs font-mono text-gray-700">{token}</span>
             {imgUrl ? (
@@ -191,6 +165,9 @@ export default function Home() {
   const [analyzing, setAnalyzing] = useState(false);
   const [devMode, setDevMode] = useState(true);
   const [analyzeMode, setAnalyzeMode] = useState<'all' | 'ipa' | 'meanings' | 'explanation' | 'tags'>('all');
+  const activeLineRef = useRef<HTMLDivElement>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const loopRef = useRef<any>(null);
   const remainRef = useRef(0);
   const pointARef = useRef<number | null>(null);
@@ -234,6 +211,23 @@ export default function Home() {
 
   const onReady = (e: any) => setPlayer(e.target);
 
+  // 再生位置を監視してactiveIndexを更新
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!player || lyrics.length === 0) return;
+      const currentMs = player.getCurrentTime() * 1000;
+      for (let i = lyrics.length - 1; i >= 0; i--) {
+        if (currentMs >= lyrics[i].offset) {
+          if (i !== activeIndex) {
+            setActiveIndex(i);
+          }
+          break;
+        }
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [player, lyrics, activeIndex]);
+
   const changeSpeed = (dir: number) => {
     const next = Math.max(0, Math.min(SPEED_STEPS.length - 1, speedIndex + dir));
     setSpeedIndex(next);
@@ -242,7 +236,26 @@ export default function Home() {
 
   const seekTo = (offsetMs: number, index: number) => {
     setActiveIndex(index);
-    if (player) { player.seekTo(offsetMs / 1000, true); player.playVideo(); }
+    if (player) {
+      const line = lyrics[index];
+      const startSec = offsetMs / 1000;
+      const endSec = (offsetMs + line.duration) / 1000;
+      updateA(startSec);
+      updateB(endSec);
+      player.seekTo(startSec, true);
+      player.setPlaybackRate(speed);
+      player.playVideo();
+      if (loopRef.current) clearInterval(loopRef.current);
+      remainRef.current = repeat;
+      loopRef.current = setInterval(() => {
+        const a = pointARef.current; const b = pointBRef.current;
+        if (a === null || b === null) return;
+        if (player.getCurrentTime() >= b) {
+          if (remainRef.current <= 1) { clearInterval(loopRef.current); player.pauseVideo(); }
+          else { remainRef.current -= 1; player.seekTo(a, true); }
+        }
+      }, 100);
+    }
   };
 
   const toggleExpand = (e: React.MouseEvent, index: number) => {
@@ -285,12 +298,17 @@ export default function Home() {
   const handleRepeatInput = (val: string) => {
     setRepeatInput(val);
     const n = parseInt(val);
-    if (!isNaN(n) && n >= 1) setRepeat(n);
+    if (!isNaN(n) && n >= 1) {
+      setRepeat(n);
+      remainRef.current = n;
+    }
   };
 
   const changeRepeat = (dir: number) => {
     const next = Math.max(1, repeat + dir);
-    setRepeat(next); setRepeatInput(String(next));
+    setRepeat(next);
+    setRepeatInput(String(next));
+    remainRef.current = next;
   };
 
   const startLoop = () => {
@@ -327,11 +345,34 @@ export default function Home() {
         <h1 className="text-2xl font-medium text-gray-900 mb-2">Lyric Phonics</h1>
         <p className="text-sm text-gray-500 mb-6">洋楽で発音を学ぶ</p>
 
-        <div className="rounded-xl overflow-hidden mb-0">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs text-gray-400">Shape of You — Ed Sheeran</p>
+          <div className="flex gap-2 flex-wrap justify-end">
+            {(['all', 'ipa', 'meanings', 'explanation', 'tags'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setAnalyzeMode(m);
+                  analyzeAll(lyrics, devMode, m);
+                }}
+                title={m === 'all' ? '全再解析' : m === 'ipa' ? 'IPA再解析' : m === 'meanings' ? '意味再解析' : m === 'explanation' ? '解説再解析' : 'タグ再解析'}
+                className={`text-xs px-3 py-1 rounded-full border transition-colors ${analyzeMode === m
+                  ? 'bg-purple-50 border-purple-300 text-purple-700'
+                  : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                  }`}
+              >
+                {m === 'all' ? '🔄' : m === 'ipa' ? '📝' : m === 'meanings' ? '🈯' : m === 'explanation' ? '💬' : '🏷️'}
+              </button>
+            ))}
+            {analyzing && <p className="text-xs text-purple-400 self-center">解析中...</p>}
+          </div>
+        </div>
+
+        <div ref={videoContainerRef} className="rounded-xl overflow-hidden mb-0">
           <YouTube videoId={VIDEO_ID} onReady={onReady} opts={{ width: '100%', height: '360' }} />
         </div>
 
-        <div className="bg-white border border-gray-100 rounded-b-xl px-4 py-4 mb-6">
+        <div className="bg-white border border-gray-100 rounded-b-xl px-4 py-4 mb-2">
           <div className="flex gap-2 mb-4">
             <div className="flex flex-1 items-center rounded-full border border-gray-200 overflow-hidden">
               <NudgeBtn disabled={pointA === null} onClick={() => updateA(pointA! - 0.1)} label="◀" />
@@ -375,46 +416,10 @@ export default function Home() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-gray-400">Shape of You — Ed Sheeran</p>
-            <div className="flex items-center gap-3">
-              {analyzing && <p className="text-xs text-purple-400">解析中...</p>}
-              <button
-                onClick={() => {
-                  const next = !devMode;
-                  setDevMode(next);
-                  analyzeAll(lyrics, next);
-                }}
-                className={`text-xs px-3 py-1 rounded-full border transition-colors ${devMode
-                  ? 'bg-amber-50 border-amber-300 text-amber-700'
-                  : 'bg-green-50 border-green-300 text-green-700'
-                  }`}
-              >
-                {devMode ? `🛠️ 開発モード（先頭${DEV_LINE_COUNT}行）` : '🎵 本番モード（全行）'}
-              </button>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {(['all', 'ipa', 'meanings', 'explanation', 'tags'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => {
-                      setAnalyzeMode(m);
-                      analyzeAll(lyrics, devMode, m);
-                    }}
-                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${analyzeMode === m
-                        ? 'bg-purple-50 border-purple-300 text-purple-700'
-                        : 'border-gray-200 text-gray-400 hover:bg-gray-50'
-                      }`}
-                  >
-                    {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA再解析' : m === 'meanings' ? '🈯 意味再解析' : m === 'explanation' ? '💬 解説再解析' : '🏷️ タグ再解析'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
           {lyrics.length === 0 && <p className="text-sm text-gray-400">読み込み中...</p>}
           <div className="space-y-2">
             {lyrics.map((line, i) => (
-              <div key={i} className={`rounded-lg border transition-colors ${activeIndex === i ? 'border-purple-100 bg-purple-50' : 'border-transparent hover:bg-gray-50'}`}>
+              <div key={i} ref={activeIndex === i ? activeLineRef : null} className={`rounded-lg border transition-colors ${activeIndex === i ? 'border-purple-100 bg-purple-50' : 'border-transparent hover:bg-gray-50'}`}>
                 <div className="p-3 cursor-pointer" onClick={() => seekTo(line.offset, i)}>
                   <div className="flex items-start gap-3">
                     <span className="text-xs text-gray-400 mt-1 flex-shrink-0">{fmtMs(line.offset)}</span>
