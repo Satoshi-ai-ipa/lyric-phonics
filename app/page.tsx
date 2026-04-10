@@ -1,5 +1,6 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import YouTube from 'react-youtube';
 import { useState, useRef, useEffect } from 'react';
 
@@ -176,6 +177,8 @@ export default function Home() {
   const pointBRef = useRef<number | null>(null);
   const speed = SPEED_STEPS[speedIndex];
   const VIDEO_ID = 'JGwWNGJdvx8';
+  const searchParams = useSearchParams();
+  const isAdmin = searchParams.get('admin') === 'true';
 
   useEffect(() => {
     fetch(`/api/captions?videoId=${VIDEO_ID}`)
@@ -344,36 +347,31 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-8 pb-96">
-        <h1 className="text-2xl font-medium text-gray-900 mb-2">Lyric Phonics</h1>
-        <p className="text-sm text-gray-500 mb-6">洋楽で発音を学ぶ</p>
-
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs text-gray-400">Shape of You — Ed Sheeran</p>
-          <div className="flex gap-2 flex-wrap justify-end">
-            {(['all', 'ipa', 'meanings', 'explanation', 'tags'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => {
-                  setAnalyzeMode(m);
-                  analyzeAll(lyrics, devMode, m);
-                }}
-                title={m === 'all' ? '全再解析' : m === 'ipa' ? 'IPA再解析' : m === 'meanings' ? '意味再解析' : m === 'explanation' ? '解説再解析' : 'タグ再解析'}
-                className={`text-xs px-3 py-1 rounded-full border transition-colors ${analyzeMode === m
-                  ? 'bg-purple-50 border-purple-300 text-purple-700'
-                  : 'border-gray-200 text-gray-400 hover:bg-gray-50'
-                  }`}
-              >
-                {m === 'all' ? '🔄' : m === 'ipa' ? '📝' : m === 'meanings' ? '🈯' : m === 'explanation' ? '💬' : '🏷️'}
-              </button>
-            ))}
-            <button
-              onClick={() => setHideJapanese(!hideJapanese)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${hideJapanese ? 'bg-gray-200 border-gray-400 text-gray-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-            >
-              {hideJapanese ? '訳を表示' : '訳を隠す'}
-            </button>
-            {analyzing && <p className="text-xs text-purple-400 self-center">解析中...</p>}
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-medium text-gray-900 mb-1">IPA Visualizer</h1>
+            <p className="text-sm text-gray-500">「目で見て、耳で覚える」発音・リスニング学習</p>
           </div>
+          {isAdmin && (
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                onClick={() => { setDevMode(!devMode); analyzeAll(lyrics, !devMode); }}
+                className={`text-xs px-3 py-1 rounded border font-medium ${devMode ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
+              >
+                {devMode ? '⚡ クイック（5行）' : '🎵 フル解析'}
+              </button>
+              {(['all', 'ipa', 'meanings', 'explanation', 'tags'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, devMode, m); }}
+                  className={`text-xs px-3 py-1 rounded border font-medium ${analyzeMode === m ? 'bg-purple-100 border-purple-400 text-purple-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
+                >
+                  {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : m === 'explanation' ? '💬 解説' : '🏷️ タグ'}
+                </button>
+              ))}
+              {analyzing && <p className="text-xs text-purple-500 self-center">解析中...</p>}
+            </div>
+          )}
         </div>
 
         <div ref={videoContainerRef} className="rounded-xl overflow-hidden mb-0">
