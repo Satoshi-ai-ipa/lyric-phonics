@@ -131,17 +131,17 @@ function IPAVisualizer({ ipa }: { ipa: string }) {
   );
 }
 
-function MeaningsRow({ meanings }: { meanings: string }) {
+function MeaningsRow({ meanings, hideJapanese, hideEnglish }: { meanings: string; hideJapanese: boolean; hideEnglish: boolean }) {
   if (!meanings) return null;
   const pairs = meanings.split('/').map(s => s.trim()).filter(Boolean);
   return (
-    <div className="flex flex-wrap gap-1 mt-2">
+    <div className="flex flex-wrap gap-2 mt-2">
       {pairs.map((pair, i) => {
         const [word, meaning] = pair.split('=').map(s => s.trim());
         return (
-          <div key={i} className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-2 py-1" style={{ minWidth: 48 }}>
-            <span className="text-xs text-amber-800 font-medium">{meaning}</span>
-            <span className="text-xs text-amber-600">{word}</span>
+          <div key={i} className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" style={{ minWidth: 64 }}>
+            {!hideJapanese && <span className="text-sm text-amber-800 font-medium">{meaning}</span>}
+            {!hideEnglish && <span className="text-sm text-amber-600">{word}</span>}
           </div>
         );
       })}
@@ -165,6 +165,8 @@ export default function Home() {
   const [analyzing, setAnalyzing] = useState(false);
   const [devMode, setDevMode] = useState(true);
   const [analyzeMode, setAnalyzeMode] = useState<'all' | 'ipa' | 'meanings' | 'explanation' | 'tags'>('all');
+  const [hideJapanese, setHideJapanese] = useState(false);
+  const [hideEnglish, setHideEnglish] = useState(false);
   const activeLineRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
@@ -364,6 +366,12 @@ export default function Home() {
                 {m === 'all' ? '🔄' : m === 'ipa' ? '📝' : m === 'meanings' ? '🈯' : m === 'explanation' ? '💬' : '🏷️'}
               </button>
             ))}
+            <button
+              onClick={() => setHideJapanese(!hideJapanese)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${hideJapanese ? 'bg-gray-200 border-gray-400 text-gray-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+            >
+              {hideJapanese ? '訳を表示' : '訳を隠す'}
+            </button>
             {analyzing && <p className="text-xs text-purple-400 self-center">解析中...</p>}
           </div>
         </div>
@@ -394,23 +402,31 @@ export default function Home() {
             </div>
             <button onClick={clearAB} className="px-4 h-9 rounded-full text-sm border border-gray-200 text-gray-400 hover:bg-gray-50">クリア</button>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 bg-gray-50 rounded-full px-3 h-9">
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 bg-gray-50 rounded-full px-2 h-8">
               <span className="text-xs text-gray-400">速度</span>
-              <button onClick={() => changeSpeed(-1)} disabled={speedIndex === 0} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-lg leading-none">−</button>
-              <span className="text-sm font-medium w-12 text-center">{speed.toFixed(2)}×</span>
-              <button onClick={() => changeSpeed(1)} disabled={speedIndex === SPEED_STEPS.length - 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-lg leading-none">+</button>
+              <button onClick={() => changeSpeed(-1)} disabled={speedIndex === 0} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-base leading-none">−</button>
+              <span className="text-xs font-medium w-10 text-center">{speed.toFixed(2)}×</span>
+              <button onClick={() => changeSpeed(1)} disabled={speedIndex === SPEED_STEPS.length - 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-base leading-none">+</button>
             </div>
-            <div className="flex items-center gap-2 bg-gray-50 rounded-full px-3 h-9">
-              <span className="text-xs text-gray-400">繰り返し</span>
-              <button onClick={() => changeRepeat(-1)} disabled={repeat <= 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-lg leading-none">−</button>
-              <input type="number" min="1" value={repeatInput} onChange={e => handleRepeatInput(e.target.value)} className="w-12 text-center text-sm font-medium bg-transparent border-none outline-none" />
+            <div className="flex items-center gap-1 bg-gray-50 rounded-full px-2 h-8">
+              <span className="text-xs text-gray-400">繰返</span>
+              <button onClick={() => changeRepeat(-1)} disabled={repeat <= 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-base leading-none">−</button>
+              <input type="number" min="1" value={repeatInput} onChange={e => handleRepeatInput(e.target.value)} className="w-8 text-center text-xs font-medium bg-transparent border-none outline-none" />
               <span className="text-xs text-gray-400">回</span>
-              <button onClick={() => changeRepeat(1)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">+</button>
+              <button onClick={() => changeRepeat(1)} className="text-gray-400 hover:text-gray-700 text-base leading-none">+</button>
             </div>
             <button onClick={startLoop} disabled={pointA === null || pointB === null}
-              className={`flex-1 h-9 rounded-full text-sm font-medium transition-colors ${pointA !== null && pointB !== null ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}>
+              className={`h-8 px-3 rounded-full text-xs font-medium transition-colors ${pointA !== null && pointB !== null ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}>
               ループ再生
+            </button>
+            <button onClick={() => setHideJapanese(!hideJapanese)}
+              className={`h-8 px-2 rounded-full text-xs border transition-colors ${hideJapanese ? 'bg-amber-50 border-amber-300 text-amber-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+              {hideJapanese ? '訳表示' : '訳を隠す'}
+            </button>
+            <button onClick={() => setHideEnglish(!hideEnglish)}
+              className={`h-8 px-2 rounded-full text-xs border transition-colors ${hideEnglish ? 'bg-amber-50 border-amber-300 text-amber-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+              {hideEnglish ? 'スペル表示' : 'スペルを隠す'}
             </button>
           </div>
         </div>
@@ -421,29 +437,48 @@ export default function Home() {
             {lyrics.map((line, i) => (
               <div key={i} ref={activeIndex === i ? activeLineRef : null} className={`rounded-lg border transition-colors ${activeIndex === i ? 'border-purple-100 bg-purple-50' : 'border-transparent hover:bg-gray-50'}`}>
                 <div className="p-3 cursor-pointer" onClick={() => seekTo(line.offset, i)}>
-                  <div className="flex items-start gap-3">
-                    <span className="text-xs text-gray-400 mt-1 flex-shrink-0">{fmtMs(line.offset)}</span>
-                    <div className="flex-1">
-                      {meaningsMap[line.offset] && <MeaningsRow meanings={meaningsMap[line.offset]} />}
-                      <p className="text-gray-900 text-sm mt-1">{cleanText(line.text)}</p>
-                      {ipaMap[line.offset] && <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>}
-                      {ipaMap[line.offset] && <IPAVisualizer ipa={ipaMap[line.offset]} />}
+                  <div className="flex flex-col gap-2">
+                    {meaningsMap[line.offset] && <MeaningsRow meanings={meaningsMap[line.offset]} hideJapanese={hideJapanese} hideEnglish={hideEnglish} />}
+                    {ipaMap[line.offset] && <IPAVisualizer ipa={ipaMap[line.offset]} />}
+                    <div className="flex gap-2 mt-1">
+                      {(cleanText(line.text) || ipaMap[line.offset]) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedIndex(expandedIndex === i ? null : i === expandedIndex ? null : i % 2 === 0 ? i : -i);
+                          }}
+                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${expandedIndex === i ? 'bg-purple-50 border-purple-300 text-purple-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                        >
+                          スペル・IPA
+                        </button>
+                      )}
+                      {explanationMap[line.offset] && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedIndex(expandedIndex === i ? null : i);
+                          }}
+                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${expandedIndex === i ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+                        >
+                          解説
+                        </button>
+                      )}
                     </div>
-                    {explanationMap[line.offset] && (
-                      <button
-                        onClick={(e) => toggleExpand(e, i)}
-                        className={`flex-shrink-0 text-xs px-2 py-1 rounded-full border transition-colors ${expandedIndex === i ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
-                      >
-                        解説
-                      </button>
-                    )}
                   </div>
                 </div>
-                {expandedIndex === i && explanationMap[line.offset] && (
-                  <div className="px-4 pb-3 pt-0">
-                    <div className="bg-blue-50 border-l-4 border-blue-300 rounded-r-lg p-3">
-                      <p className="text-xs text-blue-800 leading-relaxed">{explanationMap[line.offset]}</p>
-                    </div>
+                {expandedIndex === i && (
+                  <div className="px-4 pb-3 pt-0 flex flex-col gap-2">
+                    {cleanText(line.text) && (
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-gray-900 text-sm">{cleanText(line.text)}</p>
+                        {ipaMap[line.offset] && <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>}
+                      </div>
+                    )}
+                    {explanationMap[line.offset] && (
+                      <div className="bg-blue-50 border-l-4 border-blue-300 rounded-r-lg p-3">
+                        <p className="text-xs text-blue-800 leading-relaxed">{explanationMap[line.offset]}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
