@@ -343,7 +343,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-2xl mx-auto px-4 py-8 pb-96">
         <h1 className="text-2xl font-medium text-gray-900 mb-2">Lyric Phonics</h1>
         <p className="text-sm text-gray-500 mb-6">洋楽で発音を学ぶ</p>
 
@@ -431,7 +431,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-4 overflow-y-auto" style={{ height: 'calc(100vh - 520px)', minHeight: '300px' }}>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 overflow-y-auto" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
           {lyrics.length === 0 && <p className="text-sm text-gray-400">読み込み中...</p>}
           <div className="space-y-2">
             {lyrics.map((line, i) => (
