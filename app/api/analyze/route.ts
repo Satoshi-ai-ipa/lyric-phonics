@@ -616,13 +616,11 @@ export async function POST(request: NextRequest) {
             .eq('video_id', videoId)
             .eq('offset_ms', r.offset);
         } else {
-          const line = chunk.find((l: any) => Number(l.offset) === Number(r.offset));
-          await supabase.from('phrases').insert({
+          await supabase.from('phrases').upsert({
             video_id: videoId,
             offset_ms: r.offset,
-            text: line?.text ?? '',
             ...updateData,
-          });
+          }, { onConflict: 'video_id,offset_ms' });
         }
 
         if (r.meanings !== undefined) {
