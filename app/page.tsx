@@ -170,7 +170,8 @@ function MeaningsRow({ meanings, hideJapanese, hideEnglish, chunks, onChunkClick
 export default function Home() {
   const [lyrics, setLyrics] = useState<Line[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [expandedSpellingIndex, setExpandedSpellingIndex] = useState<number | null>(null);
+  const [expandedExplanationIndex, setExpandedExplanationIndex] = useState<number | null>(null);
   const [player, setPlayer] = useState<any>(null);
   const [speedIndex, setSpeedIndex] = useState(3);
   const [repeat, setRepeat] = useState(10);
@@ -308,11 +309,6 @@ export default function Home() {
         }
       }, 100);
     }
-  };
-
-  const toggleExpand = (e: React.MouseEvent, index: number) => {
-    e.stopPropagation();
-    setExpandedIndex(expandedIndex === index ? null : index);
   };
 
   const getCurrentTime = () => player?.getCurrentTime() ?? 0;
@@ -490,9 +486,9 @@ export default function Home() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setExpandedIndex(expandedIndex === i ? null : i === expandedIndex ? null : i % 2 === 0 ? i : -i);
+                            setExpandedSpellingIndex(expandedSpellingIndex === i ? null : i);
                           }}
-                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${expandedIndex === i ? 'bg-purple-50 border-purple-300 text-purple-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${expandedSpellingIndex === i ? 'bg-purple-50 border-purple-300 text-purple-700' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
                         >
                           スペル・IPA
                         </button>
@@ -501,29 +497,53 @@ export default function Home() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setExpandedIndex(expandedIndex === i ? null : i);
+                            setExpandedExplanationIndex(expandedExplanationIndex === i ? null : i);
                           }}
-                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${expandedIndex === i ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${expandedExplanationIndex === i ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
                         >
                           解説
                         </button>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const text = cleanText(line.text);
+                          const ipa = ipaMap[line.offset] ?? '';
+                          const query = encodeURIComponent(`以下の英文とIPA発音記号について、ネイティブがどう発音するか、どこでリンキングや音変化が起きているか日本語で詳しく教えてください。\n\n英文: ${text}\nIPA: ${ipa}`);
+                          window.open(`https://chatgpt.com/?q=${query}`, '_blank');
+                        }}
+                        className="text-xs px-3 py-1 rounded-full border border-gray-200 text-gray-400 hover:bg-gray-50 transition-colors"
+                      >
+                        GPT
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const text = cleanText(line.text);
+                          const ipa = ipaMap[line.offset] ?? '';
+                          const query = encodeURIComponent(`以下の英文とIPA発音記号について、ネイティブがどう発音するか、どこでリンキングや音変化が起きているか日本語で詳しく教えてください。\n\n英文: ${text}\nIPA: ${ipa}`);
+                          window.open(`https://claude.ai/new?q=${query}`, '_blank');
+                        }}
+                        className="text-xs px-3 py-1 rounded-full border border-gray-200 text-gray-400 hover:bg-gray-50 transition-colors"
+                      >
+                        Claude
+                      </button>
                     </div>
                   </div>
                 </div>
-                {expandedIndex === i && (
-                  <div className="px-4 pb-3 pt-0 flex flex-col gap-2">
-                    {cleanText(line.text) && (
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-gray-900 text-sm">{cleanText(line.text)}</p>
-                        {ipaMap[line.offset] && <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>}
-                      </div>
-                    )}
-                    {explanationMap[line.offset] && (
-                      <div className="bg-blue-50 border-l-4 border-blue-300 rounded-r-lg p-3">
-                        <p className="text-xs text-blue-800 leading-relaxed">{explanationMap[line.offset]}</p>
-                      </div>
-                    )}
+                {expandedSpellingIndex === i && (
+                  <div className="px-4 pb-3 pt-0">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-gray-900 text-sm">{cleanText(line.text)}</p>
+                      {ipaMap[line.offset] && <p className="text-xs text-purple-500 font-mono mt-1">{ipaMap[line.offset]}</p>}
+                    </div>
+                  </div>
+                )}
+                {expandedExplanationIndex === i && (
+                  <div className="px-4 pb-3 pt-0">
+                    <div className="bg-blue-50 border-l-4 border-blue-300 rounded-r-lg p-3">
+                      <p className="text-xs text-blue-800 leading-relaxed">{explanationMap[line.offset]}</p>
+                    </div>
                   </div>
                 )}
               </div>
