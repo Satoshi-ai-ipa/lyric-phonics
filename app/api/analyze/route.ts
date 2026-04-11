@@ -508,7 +508,8 @@ export async function POST(request: NextRequest) {
   const { data: existing } = await supabase
     .from('phrases')
     .select('offset_ms, ipa, meanings, explanation')
-    .eq('video_id', videoId);
+    .eq('video_id', videoId)
+    .limit(1000);
 
   const existingMap = new Map(
     existing?.map((r: any) => [Number(r.offset_ms), {
@@ -522,18 +523,50 @@ export async function POST(request: NextRequest) {
   const targetLyrics = devMode ? lyrics.slice(0, DEV_LINE_COUNT) : lyrics;
 
   if (mode === 'tags') {
-    for (const l of targetLyrics) {
-      const rec = existingMap.get(Number(l.offset));
-      if (!rec?.meanings) continue;
-      const chunkRows = parseMeaningsToChunks(rec.meanings, videoId, Number(l.offset));
-      await supabase.from('chunks').delete()
-        .eq('video_id', videoId)
-        .eq('phrase_offset_ms', Number(l.offset));
-      if (chunkRows.length > 0) {
-        await supabase.from('chunks').insert(chunkRows);
+    // phrasesテーブルから全データを直接取得
+    const { data: allPhrases } = await supabase
+      .from('phrases')
+      .select('offset_ms, meanings')
+      .eq('video_id', videoId);
+
+    if (allPhrases) {
+      for (const phrase of allPhrases) {
+        if (!phrase.meanings) continue;
+        const chunkRows = parseMeaningsToChunks(phrase.meanings, videoId, Number(phrase.offset_ms));
+        await supabase.from('chunks').delete()
+          .eq('video_id', videoId)
+          .eq('phrase_offset_ms', Number(phrase.offset_ms));
+        if (chunkRows.length > 0) {
+          await supabase.from('chunks').insert(chunkRows);
+        }
       }
     }
-    return NextResponse.json({ message: 'tags updated', cached: false });
+    return NextResponse.json({ message: 'chunks updated', cached: false });
+  }
+
+  if (mode === 'meanings') {
+    const { data: allPhrases } = await supabase
+      .from('phrases')
+      .select('offset_ms, meanings')
+      .eq('video_id', videoId)
+      .limit(1000);
+    console.log(`meanings モード: allPhrases件数 = ${allPhrases?.length}`);
+
+    let savedCount = 0;
+    for (const phrase of allPhrases ?? []) {
+      if (!phrase.meanings) continue;
+      const chunkRows = parseMeaningsToChunks(phrase.meanings, videoId, Number(phrase.offset_ms));
+      await supabase.from('chunks').delete()
+        .eq('video_id', videoId)
+        .eq('phrase_offset_ms', Number(phrase.offset_ms));
+      if (chunkRows.length > 0) {
+        const { error } = await supabase.from('chunks').insert(chunkRows);
+        if (error) console.error('chunks insert error:', error);
+        else savedCount++;
+      }
+    }
+    console.log(`chunks保存完了: ${savedCount}行`);
+    return NextResponse.json({ message: 'chunks updated', cached: false });
   }
 
   const missing = targetLyrics.filter((l: any) => {

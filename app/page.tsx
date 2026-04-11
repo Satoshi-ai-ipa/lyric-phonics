@@ -360,13 +360,13 @@ export default function Home() {
               >
                 {devMode ? '⚡ クイック（5行）' : '🎵 フル解析'}
               </button>
-              {(['all', 'ipa', 'meanings', 'explanation', 'tags'] as const).map((m) => (
+              {(['all', 'ipa', 'meanings', 'explanation'] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, devMode, m); }}
                   className={`text-xs px-3 py-1 rounded border font-medium ${analyzeMode === m ? 'bg-purple-100 border-purple-400 text-purple-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
                 >
-                  {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : m === 'explanation' ? '💬 解説' : '🏷️ タグ'}
+                 {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : '💬 解説'}
                 </button>
               ))}
               {analyzing && <p className="text-xs text-purple-500 self-center">解析中...</p>}
