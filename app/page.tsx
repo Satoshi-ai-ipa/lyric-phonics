@@ -132,15 +132,32 @@ function IPAVisualizer({ ipa }: { ipa: string }) {
   );
 }
 
-function MeaningsRow({ meanings, hideJapanese, hideEnglish }: { meanings: string; hideJapanese: boolean; hideEnglish: boolean }) {
+function MeaningsRow({ meanings, hideJapanese, hideEnglish, chunks, onChunkClick }: {
+  meanings: string;
+  hideJapanese: boolean;
+  hideEnglish: boolean;
+  chunks?: { english: string; japanese: string; start_ms: number | null; phrase_offset_ms: number }[];
+  onChunkClick?: (start_ms: number | null, phrase_offset_ms: number, end_ms?: number | null) => void;
+}) {
   if (!meanings) return null;
   const pairs = meanings.split('/').map(s => s.trim()).filter(Boolean);
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {pairs.map((pair, i) => {
         const [word, meaning] = pair.split('=').map(s => s.trim());
+        const chunk = chunks?.find(c => c.english === word);
         return (
-          <div key={i} className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" style={{ minWidth: 64 }}>
+          <div
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onChunkClick && chunk) {
+                onChunkClick(chunk.start_ms, chunk.phrase_offset_ms, chunk.end_ms);
+              }
+            }}
+            className={`flex flex-col items-center bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 ${chunk?.start_ms ? 'cursor-pointer hover:bg-amber-100' : ''}`}
+            style={{ minWidth: 64 }}
+          >
             {!hideJapanese && <span className="text-sm text-amber-800 font-medium">{meaning}</span>}
             {!hideEnglish && <span className="text-sm text-amber-600">{word}</span>}
           </div>
@@ -161,6 +178,7 @@ export default function Home() {
   const [pointA, setPointA] = useState<number | null>(null);
   const [pointB, setPointB] = useState<number | null>(null);
   const [ipaMap, setIpaMap] = useState<Record<number, string>>({});
+  const [chunksMap, setChunksMap] = useState<Record<number, { id: string; english: string; japanese: string; start_ms: number | null; phrase_offset_ms: number; position: number }[]>>({});
   const [meaningsMap, setMeaningsMap] = useState<Record<number, string>>({});
   const [explanationMap, setExplanationMap] = useState<Record<number, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
@@ -170,7 +188,6 @@ export default function Home() {
   const [hideEnglish, setHideEnglish] = useState(false);
   const activeLineRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
-  const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const loopRef = useRef<any>(null);
   const remainRef = useRef(0);
   const pointARef = useRef<number | null>(null);
@@ -189,10 +206,38 @@ export default function Home() {
         );
         setLyrics(filtered);
         analyzeAll(filtered, true);
+        fetchChunks();
       });
   }, []);
 
   const DEV_LINE_COUNT = 5;
+  const handleChunkClick = (start_ms: number | null, phrase_offset_ms: number, end_ms?: number | null) => {
+    const startSec = (start_ms ?? phrase_offset_ms) / 1000;
+    const endSec = end_ms ? end_ms / 1000 : startSec + 3;
+    updateA(startSec);
+    updateB(endSec);
+    if (loopRef.current) clearInterval(loopRef.current);
+    remainRef.current = repeat;
+    if (player) {
+      player.seekTo(startSec, true);
+      player.setPlaybackRate(speed);
+      player.playVideo();
+      loopRef.current = setInterval(() => {
+        const a = pointARef.current;
+        const b = pointBRef.current;
+        if (a === null || b === null) return;
+        if (player.getCurrentTime() >= b) {
+          if (remainRef.current <= 1) { clearInterval(loopRef.current); player.pauseVideo(); }
+          else { remainRef.current -= 1; player.seekTo(a, true); }
+        }
+      }, 100);
+    }
+  };
+  const fetchChunks = async () => {
+    const res = await fetch(`/api/chunks?videoId=${VIDEO_ID}`);
+    const data = await res.json();
+    if (data.chunksMap) setChunksMap(data.chunksMap);
+  };
   const analyzeAll = async (lines: Line[], isDev?: boolean, mode?: string) => {
     setAnalyzing(true);
     try {
@@ -214,7 +259,9 @@ export default function Home() {
     }
   };
 
-  const onReady = (e: any) => setPlayer(e.target);
+  const onReady = (e: any) => {
+    setPlayer(e.target);
+  };
 
   // 再生位置を監視してactiveIndexを更新
   useEffect(() => {
@@ -366,7 +413,7 @@ export default function Home() {
                   onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, devMode, m); }}
                   className={`text-xs px-3 py-1 rounded border font-medium ${analyzeMode === m ? 'bg-purple-100 border-purple-400 text-purple-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
                 >
-                 {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : '💬 解説'}
+                  {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : '💬 解説'}
                 </button>
               ))}
               {analyzing && <p className="text-xs text-purple-500 self-center">解析中...</p>}
@@ -436,7 +483,7 @@ export default function Home() {
               <div key={i} ref={activeIndex === i ? activeLineRef : null} className={`rounded-lg border transition-colors ${activeIndex === i ? 'border-purple-100 bg-purple-50' : 'border-transparent hover:bg-gray-50'}`}>
                 <div className="p-3 cursor-pointer" onClick={() => seekTo(line.offset, i)}>
                   <div className="flex flex-col gap-2">
-                    {meaningsMap[line.offset] && <MeaningsRow meanings={meaningsMap[line.offset]} hideJapanese={hideJapanese} hideEnglish={hideEnglish} />}
+                    {meaningsMap[line.offset] && <MeaningsRow meanings={meaningsMap[line.offset]} hideJapanese={hideJapanese} hideEnglish={hideEnglish} chunks={chunksMap[line.offset]} onChunkClick={handleChunkClick} />}
                     {ipaMap[line.offset] && <IPAVisualizer ipa={ipaMap[line.offset]} />}
                     <div className="flex gap-2 mt-1">
                       {(cleanText(line.text) || ipaMap[line.offset]) && (
