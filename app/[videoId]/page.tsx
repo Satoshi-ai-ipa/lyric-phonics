@@ -184,6 +184,8 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
   const [meaningsMap, setMeaningsMap] = useState<Record<number, string>>({});
   const [explanationMap, setExplanationMap] = useState<Record<number, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
+  const [isAnalyzed, setIsAnalyzed] = useState(false);
+  const [checkingAnalyzed, setCheckingAnalyzed] = useState(true);
   const [devMode, setDevMode] = useState(true);
   const [analyzeMode, setAnalyzeMode] = useState<'all' | 'ipa' | 'meanings' | 'explanation' | 'tags'>('all');
   const [hideJapanese, setHideJapanese] = useState(false);
@@ -202,17 +204,38 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
   useEffect(() => {
     fetch(`/api/captions?videoId=${VIDEO_ID}`)
       .then(r => r.json())
-      .then(data => {
+      .then(async data => {
         const filtered = data.transcript.filter((l: Line) =>
           !l.text.startsWith('[') && !l.text.startsWith('♪ (')
         );
         setLyrics(filtered);
-        analyzeAll(filtered, true);
-        fetchChunks();
+        const analyzed = await checkIfAnalyzed();
+        if (analyzed) {
+          fetchChunks();
+          analyzeAll(filtered, true);
+        } else {
+          setCheckingAnalyzed(false);
+        }
       });
   }, []);
 
+  const checkIfAnalyzed = async () => {
+    setCheckingAnalyzed(true);
+    try {
+      const res = await fetch(`/api/analyzed?videoId=${VIDEO_ID}`);
+      const data = await res.json();
+      setIsAnalyzed(data.isAnalyzed);
+      return data.isAnalyzed;
+    } catch (e) {
+      console.error(e);
+      return false;
+    } finally {
+      setCheckingAnalyzed(false);
+    }
+  };
+
   const DEV_LINE_COUNT = 5;
+
   const handleChunkClick = (start_ms: number | null, phrase_offset_ms: number, end_ms?: number | null) => {
     const startSec = (start_ms ?? phrase_offset_ms) / 1000;
     const endSec = end_ms ? end_ms / 1000 : startSec + 3;
@@ -235,11 +258,13 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
       }, 100);
     }
   };
+
   const fetchChunks = async () => {
     const res = await fetch(`/api/chunks?videoId=${VIDEO_ID}`);
     const data = await res.json();
     if (data.chunksMap) setChunksMap(data.chunksMap);
   };
+
   const analyzeAll = async (lines: Line[], isDev?: boolean, mode?: string) => {
     setAnalyzing(true);
     try {
@@ -265,16 +290,13 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
     setPlayer(e.target);
   };
 
-  // 再生位置を監視してactiveIndexを更新
   useEffect(() => {
     const interval = setInterval(() => {
       if (!player || lyrics.length === 0) return;
       const currentMs = player.getCurrentTime() * 1000;
       for (let i = lyrics.length - 1; i >= 0; i--) {
         if (currentMs >= lyrics[i].offset) {
-          if (i !== activeIndex) {
-            setActiveIndex(i);
-          }
+          if (i !== activeIndex) setActiveIndex(i);
           break;
         }
       }
@@ -302,7 +324,8 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
       if (loopRef.current) clearInterval(loopRef.current);
       remainRef.current = repeat;
       loopRef.current = setInterval(() => {
-        const a = pointARef.current; const b = pointBRef.current;
+        const a = pointARef.current;
+        const b = pointBRef.current;
         if (a === null || b === null) return;
         if (player.getCurrentTime() >= b) {
           if (remainRef.current <= 1) { clearInterval(loopRef.current); player.pauseVideo(); }
@@ -368,7 +391,8 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
     player.setPlaybackRate(speed);
     player.playVideo();
     loopRef.current = setInterval(() => {
-      const a = pointARef.current; const b = pointBRef.current;
+      const a = pointARef.current;
+      const b = pointBRef.current;
       if (a === null || b === null) return;
       if (player.getCurrentTime() >= b) {
         if (remainRef.current <= 1) { clearInterval(loopRef.current); player.pauseVideo(); }
@@ -388,6 +412,14 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
     <button onClick={onClick} disabled={disabled} className="px-2 h-9 text-gray-400 hover:bg-gray-100 disabled:opacity-20 text-xs">{label}</button>
   );
 
+  if (checkingAnalyzed) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-sm text-gray-400">読み込み中...</p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-8 pb-96">
@@ -396,26 +428,45 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
             <h1 className="text-2xl font-medium text-gray-900 mb-1">IPA Visualizer</h1>
             <p className="text-sm text-gray-500">「目で見て、耳で覚える」発音・リスニング学習</p>
           </div>
-          {isAdmin && (
-            <div className="flex flex-wrap gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 justify-end items-center">
+            {isAnalyzed ? (
+              <span className="text-xs px-3 py-1 rounded border font-medium bg-green-50 border-green-300 text-green-700">
+                IPA解析済み
+              </span>
+            ) : (
               <button
-                onClick={() => { setDevMode(!devMode); analyzeAll(lyrics, !devMode); }}
-                className={`text-xs px-3 py-1 rounded border font-medium ${devMode ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
+                onClick={async () => {
+                  await analyzeAll(lyrics, false);
+                  await fetchChunks();
+                  setIsAnalyzed(true);
+                }}
+                disabled={analyzing}
+                className={`text-xs px-3 py-1 rounded border font-medium ${analyzing ? 'bg-gray-100 border-gray-300 text-gray-400' : 'bg-purple-600 border-purple-600 text-white hover:bg-purple-700'}`}
               >
-                {devMode ? '⚡ クイック（5行）' : '🎵 フル解析'}
+                {analyzing ? '解析中...' : 'IPA解析する'}
               </button>
-              {(['all', 'ipa', 'meanings', 'explanation'] as const).map((m) => (
+            )}
+            {isAdmin && (
+              <>
                 <button
-                  key={m}
-                  onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, devMode, m); }}
-                  className={`text-xs px-3 py-1 rounded border font-medium ${analyzeMode === m ? 'bg-purple-100 border-purple-400 text-purple-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
+                  onClick={() => { setDevMode(!devMode); analyzeAll(lyrics, !devMode); }}
+                  className={`text-xs px-3 py-1 rounded border font-medium ${devMode ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
                 >
-                  {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : '💬 解説'}
+                  {devMode ? '⚡ クイック（5行）' : '🎵 フル解析'}
                 </button>
-              ))}
-              {analyzing && <p className="text-xs text-purple-500 self-center">解析中...</p>}
-            </div>
-          )}
+                {(['all', 'ipa', 'meanings', 'explanation'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, devMode, m); }}
+                    className={`text-xs px-3 py-1 rounded border font-medium ${analyzeMode === m ? 'bg-purple-100 border-purple-400 text-purple-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
+                  >
+                    {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : '💬 解説'}
+                  </button>
+                ))}
+              </>
+            )}
+            {analyzing && <p className="text-xs text-purple-500 self-center">解析中...</p>}
+          </div>
         </div>
 
         <div ref={videoContainerRef} className="rounded-xl overflow-hidden mb-0">
@@ -482,6 +533,9 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
                   <div className="flex flex-col gap-2">
                     {meaningsMap[line.offset] && <MeaningsRow meanings={meaningsMap[line.offset]} hideJapanese={hideJapanese} hideEnglish={hideEnglish} chunks={chunksMap[line.offset]} onChunkClick={handleChunkClick} />}
                     {ipaMap[line.offset] && <IPAVisualizer ipa={ipaMap[line.offset]} />}
+                    {!isAnalyzed && (
+                      <p className="text-xs text-gray-400 font-mono">{cleanText(line.text)}</p>
+                    )}
                     <div className="flex gap-2 mt-1">
                       {(cleanText(line.text) || ipaMap[line.offset]) && (
                         <button
