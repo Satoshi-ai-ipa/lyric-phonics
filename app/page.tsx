@@ -31,7 +31,8 @@ export default function TopPage() {
 
   const handleSearch = () => {
     if (!query) return;
-    router.push(`/?q=${encodeURIComponent(query)}`);
+    const isAdmin = searchParams.get('admin') === 'true';
+    router.push(`/?q=${encodeURIComponent(query)}${isAdmin ? '&admin=true' : ''}`);
     search(query);
   };
 
@@ -71,7 +72,7 @@ export default function TopPage() {
           {videos.map((video) => (
             <div
               key={video.id}
-              onClick={() => router.push(`/${video.id}`)}
+              onClick={() => router.push(`/${video.id}${searchParams.get('admin') === 'true' ? '?admin=true' : ''}`)}
               className="cursor-pointer group"
             >
               <div className="rounded-xl overflow-hidden mb-2">
