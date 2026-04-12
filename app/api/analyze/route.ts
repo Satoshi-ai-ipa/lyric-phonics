@@ -1,34 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-function detectPhoneticFeatures(ipa: string): string[] {
-  const features: string[] = [];
-  if (ipa.includes('ɾ')) features.push('flapping');
-  if (ipa.includes('dʒ') || ipa.includes('tʃ') || ipa.includes('ʒ') || ipa.includes('ʃ')) features.push('coalescence');
-  if (ipa.includes('̚')) features.push('unreleased_stop');
-  if (ipa.includes('ʔ')) features.push('glottal_stop');
-  if (ipa.includes('ɫ')) features.push('dark_l');
-  if (ipa.includes('ə') || ipa.includes('ɚ')) features.push('weak_form');
-  if (ipa.includes('j') || ipa.includes('w')) features.push('linking');
-  return features;
-}
-
 function parseMeaningsToChunks(
   meanings: string,
   videoId: string,
   offsetMs: number
-): { video_id: string; phrase_offset_ms: number; english: string; japanese: string; position: number; phonetic_features: string[] }[] {
+): { video_id: string; phrase_offset_ms: number; english: string; japanese: string; position: number }[] {
   if (!meanings) return [];
   return meanings.split('/').map((s, i) => {
     const [english, japanese] = s.split('=').map(x => x?.trim() ?? '');
-    const features = detectPhoneticFeatures(english);
     return {
       video_id: videoId,
       phrase_offset_ms: offsetMs,
       english,
       japanese,
       position: i,
-      phonetic_features: features,
     };
   }).filter(c => c.english && c.japanese);
 }
