@@ -136,7 +136,7 @@ function MeaningsRow({ meanings, hideJapanese, hideEnglish, chunks, onChunkClick
   meanings: string;
   hideJapanese: boolean;
   hideEnglish: boolean;
-  chunks?: { english: string; japanese: string; start_ms: number | null; phrase_offset_ms: number }[];
+  chunks?: { english: string; japanese: string; start_ms: number | null; phrase_offset_ms: number; end_ms: number | null }[];
   onChunkClick?: (start_ms: number | null, phrase_offset_ms: number, end_ms?: number | null) => void;
 }) {
   if (!meanings) return null;
@@ -180,14 +180,13 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
   const [pointA, setPointA] = useState<number | null>(null);
   const [pointB, setPointB] = useState<number | null>(null);
   const [ipaMap, setIpaMap] = useState<Record<number, string>>({});
-  const [chunksMap, setChunksMap] = useState<Record<number, { id: string; english: string; japanese: string; start_ms: number | null; phrase_offset_ms: number; position: number }[]>>({});
+  const [chunksMap, setChunksMap] = useState<Record<number, { id: string; english: string; japanese: string; start_ms: number | null; end_ms: number | null; phrase_offset_ms: number; position: number }[]>>({});
   const [meaningsMap, setMeaningsMap] = useState<Record<number, string>>({});
   const [explanationMap, setExplanationMap] = useState<Record<number, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [isAnalyzed, setIsAnalyzed] = useState(false);
   const [checkingAnalyzed, setCheckingAnalyzed] = useState(true);
-  const [devMode, setDevMode] = useState(true);
-  const [analyzeMode, setAnalyzeMode] = useState<'all' | 'ipa' | 'meanings' | 'explanation' | 'tags'>('all');
+  const [analyzeMode, setAnalyzeMode] = useState<'all' | 'ipa' | 'meanings' | 'explanation'>('all');
   const [hideJapanese, setHideJapanese] = useState(false);
   const [hideEnglish, setHideEnglish] = useState(false);
   const activeLineRef = useRef<HTMLDivElement>(null);
@@ -212,7 +211,7 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
         const analyzed = await checkIfAnalyzed();
         if (analyzed) {
           fetchChunks();
-          analyzeAll(filtered, true);
+          analyzeAll(filtered);
         } else {
           setCheckingAnalyzed(false);
         }
@@ -233,8 +232,6 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
       setCheckingAnalyzed(false);
     }
   };
-
-  const DEV_LINE_COUNT = 5;
 
   const handleChunkClick = (start_ms: number | null, phrase_offset_ms: number, end_ms?: number | null) => {
     const startSec = (start_ms ?? phrase_offset_ms) / 1000;
@@ -265,15 +262,14 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
     if (data.chunksMap) setChunksMap(data.chunksMap);
   };
 
-  const analyzeAll = async (lines: Line[], isDev?: boolean, mode?: string) => {
+  const analyzeAll = async (lines: Line[], mode?: string) => {
     setAnalyzing(true);
     try {
-      const targetLines = isDev ?? devMode ? lines.slice(0, DEV_LINE_COUNT) : lines;
-      const payload = targetLines.map(l => ({ offset: l.offset, text: cleanText(l.text) }));
+      const payload = lines.map(l => ({ offset: l.offset, text: cleanText(l.text) }));
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: VIDEO_ID, lyrics: payload, devMode: isDev ?? devMode, mode: mode ?? analyzeMode }),
+        body: JSON.stringify({ videoId: VIDEO_ID, lyrics: payload, mode: mode ?? analyzeMode }),
       });
       const data = await res.json();
       if (data.ipaMap) setIpaMap(data.ipaMap);
@@ -402,10 +398,6 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
   };
 
   const fmt = (n: number) => `${Math.floor(n / 60)}:${(n % 60).toFixed(1).padStart(4, '0')}`;
-  const fmtMs = (ms: number) => {
-    const t = Math.floor(ms / 1000);
-    return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-  };
   const cleanText = (text: string) => text.replace(/♪\s*/g, '').replace(/\s*♪/g, '').replace(/\n/g, ' ').trim();
 
   const NudgeBtn = ({ onClick, label, disabled }: { onClick: () => void; label: string; disabled?: boolean }) => (
@@ -436,7 +428,7 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
             ) : (
               <button
                 onClick={async () => {
-                  await analyzeAll(lyrics, false);
+                  await analyzeAll(lyrics);
                   await fetchChunks();
                   setIsAnalyzed(true);
                 }}
@@ -448,16 +440,10 @@ export default function Home({ params }: { params: Promise<{ videoId: string }> 
             )}
             {isAdmin && (
               <>
-                <button
-                  onClick={() => { setDevMode(!devMode); analyzeAll(lyrics, !devMode); }}
-                  className={`text-xs px-3 py-1 rounded border font-medium ${devMode ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
-                >
-                  {devMode ? '⚡ クイック（5行）' : '🎵 フル解析'}
-                </button>
                 {(['all', 'ipa', 'meanings', 'explanation'] as const).map((m) => (
                   <button
                     key={m}
-                    onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, devMode, m); }}
+                    onClick={() => { setAnalyzeMode(m); analyzeAll(lyrics, m); }}
                     className={`text-xs px-3 py-1 rounded border font-medium ${analyzeMode === m ? 'bg-purple-100 border-purple-400 text-purple-800' : 'bg-gray-100 border-gray-400 text-gray-700'}`}
                   >
                     {m === 'all' ? '🔄 全再解析' : m === 'ipa' ? '📝 IPA' : m === 'meanings' ? '🈯 意味' : '💬 解説'}

@@ -483,13 +483,37 @@ Return ONLY a valid JSON array:
 }
 
 export async function POST(request: NextRequest) {
-  const { videoId, lyrics, devMode, mode = 'all' } = await request.json();
+  const { videoId, lyrics, mode = 'all' } = await request.json();
 
   if (!videoId || !lyrics?.length) {
     return NextResponse.json({ error: 'missing params' }, { status: 400 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
+
+  // videosテーブルに登録（未登録の場合のみ）
+  const { data: existingVideo } = await supabase
+    .from('videos')
+    .select('id')
+    .eq('video_id', videoId)
+    .single();
+
+  if (!existingVideo) {
+    // YouTube APIからタイトルを取得
+    const youtubeApiKey = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+    const ytRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${youtubeApiKey}`
+    );
+    const ytData = await ytRes.json();
+    const snippet = ytData.items?.[0]?.snippet;
+
+    await supabase.from('videos').insert({
+      video_id: videoId,
+      title: snippet?.title ?? '',
+      artist_name: snippet?.channelTitle ?? '',
+      accent: 'GA',
+    });
+  }
 
   const { data: existing } = await supabase
     .from('phrases')
@@ -505,55 +529,7 @@ export async function POST(request: NextRequest) {
     }]) ?? []
   );
 
-  const DEV_LINE_COUNT = 5;
-  const targetLyrics = devMode ? lyrics.slice(0, DEV_LINE_COUNT) : lyrics;
-
-  if (mode === 'tags') {
-    // phrasesテーブルから全データを直接取得
-    const { data: allPhrases } = await supabase
-      .from('phrases')
-      .select('offset_ms, meanings')
-      .eq('video_id', videoId);
-
-    if (allPhrases) {
-      for (const phrase of allPhrases) {
-        if (!phrase.meanings) continue;
-        const chunkRows = parseMeaningsToChunks(phrase.meanings, videoId, Number(phrase.offset_ms));
-        await supabase.from('chunks').delete()
-          .eq('video_id', videoId)
-          .eq('phrase_offset_ms', Number(phrase.offset_ms));
-        if (chunkRows.length > 0) {
-          await supabase.from('chunks').insert(chunkRows);
-        }
-      }
-    }
-    return NextResponse.json({ message: 'chunks updated', cached: false });
-  }
-
-  if (mode === 'meanings') {
-    const { data: allPhrases } = await supabase
-      .from('phrases')
-      .select('offset_ms, meanings')
-      .eq('video_id', videoId)
-      .limit(1000);
-    console.log(`meanings モード: allPhrases件数 = ${allPhrases?.length}`);
-
-    let savedCount = 0;
-    for (const phrase of allPhrases ?? []) {
-      if (!phrase.meanings) continue;
-      const chunkRows = parseMeaningsToChunks(phrase.meanings, videoId, Number(phrase.offset_ms));
-      await supabase.from('chunks').delete()
-        .eq('video_id', videoId)
-        .eq('phrase_offset_ms', Number(phrase.offset_ms));
-      if (chunkRows.length > 0) {
-        const { error } = await supabase.from('chunks').insert(chunkRows);
-        if (error) console.error('chunks insert error:', error);
-        else savedCount++;
-      }
-    }
-    console.log(`chunks保存完了: ${savedCount}行`);
-    return NextResponse.json({ message: 'chunks updated', cached: false });
-  }
+  const targetLyrics = lyrics;
 
   const missing = targetLyrics.filter((l: any) => {
     const rec = existingMap.get(Number(l.offset));
