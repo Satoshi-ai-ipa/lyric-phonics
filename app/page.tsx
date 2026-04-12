@@ -1,19 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function TopPage() {
-  const [query, setQuery] = useState('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get('q') ?? '';
+  const [query, setQuery] = useState(initialQuery);
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-  const search = async () => {
-    if (!query) return;
+  const search = async (q: string) => {
+    if (!q) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/youtube?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       setVideos(data.videos ?? []);
     } catch (e) {
@@ -21,6 +23,16 @@ export default function TopPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (initialQuery) search(initialQuery);
+  }, []);
+
+  const handleSearch = () => {
+    if (!query) return;
+    router.push(`/?q=${encodeURIComponent(query)}`);
+    search(query);
   };
 
   return (
@@ -40,12 +52,12 @@ export default function TopPage() {
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && search()}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
               placeholder="アーティスト名・曲名で検索..."
               className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-purple-300"
             />
             <button
-              onClick={search}
+              onClick={handleSearch}
               className="px-6 py-3 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700"
             >
               検索
